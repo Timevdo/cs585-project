@@ -67,8 +67,8 @@ def segment_hands(frame):
     c2 = center_of_contours(hand2)
 
     if (c1[0] > c2[0]):
-        return (c2, c1)
-    return (c1, c2)
+        return np.array((c2, c1))
+    return np.array((c1, c2))
 
 def angle_of_wheel_line(c1, c2):
     x1, y1 = c1
