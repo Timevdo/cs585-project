@@ -1,9 +1,11 @@
+import time
 from typing import Any
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
+import fcn_model
 from torchvision.transforms import transforms
 
 
@@ -45,13 +47,13 @@ class SegmentedImage:
 
 class Segmenter:
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    model: Any
+    model: fcn_model.FCN8s
     device: Any
     class_dict_path: str
 
     def __init__(self, model_path: str, class_dict_path: str):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = torch.load(model_path)
+        self.model = torch.load(model_path, map_location=self.device)
         self.model.eval()
         self.class_dict_path = class_dict_path
 
@@ -75,8 +77,11 @@ class Segmenter:
 if __name__ == "__main__":
     # Read image
     frame = cv2.imread("Untitled.png")
+    print(frame.shape)
     segmenter = Segmenter("segmentation-model.pt", "class_dict.csv")
+    start_time = time.time()
     segmented_image = segmenter.segment_image(frame)
-
     cv2.imshow("Segmented Image", segmented_image.get_rgb_image())
+    print("Time taken to segment the image: ", time.time() - start_time)
+
     cv2.waitKey(0)
