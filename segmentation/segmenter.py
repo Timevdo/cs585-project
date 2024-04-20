@@ -28,7 +28,7 @@ class SegmentedImage:
         pred_img = np.zeros((self.segmented_image.shape[0], self.segmented_image.shape[1], 3), dtype=np.uint8)
         for i in range(self.segmented_image.shape[0]):
             for j in range(self.segmented_image.shape[1]):
-                pred_img[i][j] = self.__id_to_rgb(self.segmented_image[i][j])
+                pred_img[i][j] = self.class_list[self.segmented_image[i][j]][0]
         return pred_img
 
     @staticmethod
@@ -41,12 +41,6 @@ class SegmentedImage:
             class_name = df.iloc[i]['name']
             id_dict[class_id] = (color, class_name)
         return id_dict
-
-    def __id_to_rgb(self, id):
-        return self.class_list[id][0]
-
-    def __id_to_name(self, id):
-        return self.class_list[id][1]
 
 
 class Segmenter:
@@ -80,7 +74,7 @@ class Segmenter:
 
 if __name__ == "__main__":
     # Read image
-    frame = cv2.imread("./Seq05VD_f00510.png")
+    frame = cv2.imread("Untitled.png")
     segmenter = Segmenter("segmentation-model.pt", "class_dict.csv")
     segmented_image = segmenter.segment_image(frame)
 
