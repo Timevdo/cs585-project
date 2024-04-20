@@ -76,3 +76,54 @@ def angle_of_wheel_line(c1, c2):
 
     return np.rad2deg(np.arctan2((y2 - y1), (x2 - x1)))
 
+def find_speedometer(template_image_path, video_path, threshold=0):
+    # Read the template image
+    template = cv2.imread(template_image_path, cv2.IMREAD_GRAYSCALE)
+
+    # Read the video
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        print("Error: Couldn't open the video file")
+        return
+
+    # Get the width and height of the template
+    h, w = template.shape[:2]
+
+    while True:
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        # Convert the frame to grayscale
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Perform template matching
+        result = cv2.matchTemplate(gray_frame, template, cv2.TM_CCOEFF_NORMED)
+
+        # Find the location of the best match
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+        # Draw rectangle around the best match
+        if max_val >= threshold:
+            top_left = max_loc
+            bottom_right = (top_left[0] + w, top_left[1] + h)
+            cv2.rectangle(frame, top_left, bottom_right, (0, 255, 255), 2)
+
+        # Display the frame
+        cv2.imshow('Speedometer Detection', frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+template_image_path = 'data/honda_speedometer.png'
+video_path = 'data/honda_highway_footage.mp4'
+find_speedometer(template_image_path, video_path)
