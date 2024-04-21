@@ -24,11 +24,11 @@ def find_speedometer_template_matching(frame, templates, threshold=0.0):
         center = (top_left[0] + w // 2, top_left[1] + h // 2)
 
         if best_match is None or max_val > best_match[0]:
-            best_match = (max_val, center, top_left, bottom_right)
+            best_match = (max_val, center, top_left, bottom_right, template)
 
     # Draw rectangle around the best match
     if best_match[0] >= threshold:
-        return best_match[1], best_match[2], best_match[3]
+        return best_match[1], best_match[2], best_match[3], best_match[4]
 
     return None, None, None
 
@@ -61,14 +61,24 @@ def init_feature_tracking():
     return orb, bf
 
 
+prev_frame = None
+pt_color_dict = {}
+template_match_history = []
+
+
 def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
-                     template_match_history, pt_color_dict, predicted_center, threshold=0.2, debug=False):
+                     predicted_center, threshold=0.2, debug=False):
+
+    global prev_frame
+    global pt_color_dict
+    global template_match_history
+
     # Find the speedometer
-    template_center, top_left, bottom_right = find_speedometer_template_matching(frame, speedometer_templates,
+    template_center, top_left, bottom_right, matched_template = find_speedometer_template_matching(frame, speedometer_templates,
                                                                                  threshold=threshold)
     template_match_history += [template_center]
 
-    # If a match is found, draw it
+    # If a match is found, draw it for debug
     if template_center is not None and debug:
         cv2.rectangle(frame, top_left, bottom_right, (0, 255, 255), 2)
         cv2.circle(frame, template_center, 5, (255, 0, 0), -1)
@@ -79,79 +89,58 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
     # we are confident in the match. If the template center has stayed the same for the last ~10 frames
     # TODO: Make hyper parameters adjustable
     # TODO: make the max jump distance allow depend on how long its been since the last match
-    if template_center is not None and len(template_match_history) > 10:
-        if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-10:]]):
+    if template_center is not None and len(template_match_history) > 7:
+        if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-7:]]):
             predicted_center = template_center
 
     temp_history = template_match_history[-10:]
     template_match_history.clear()
     template_match_history.extend(temp_history)
 
-    # Convert frame to grayscale
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Mask the frame to the region of interest (which is everything below the top left corner of the speedometer)
+    if predicted_center is not None:
+        frame[:predicted_center[1] - matched_template.shape[0] // 2, :] = (0, 0, 0)
 
     # Find keypoints and descriptors in the current frame
-    kp, des = orb.detectAndCompute(gray_frame, None)
+    kp, des = orb.detectAndCompute(frame, None)
 
     if des is not None and prev_des is not None and prev_kp is not None and kp is not None:
 
         # Match descriptors between the current and previous frames
         matches = bf.match(prev_des, des)
 
+        # Sort the matches by distance
+        matches = sorted(matches, key=lambda x: x.distance)
+
+        # Take the top 25% of the strongest matches
+        #matches = matches[:len(matches) // 4]
+
         # Initialize variables to store matched keypoints and their vectors for this frame
         vectors_frame = []
-        matched_kps = []
 
         # Process each match
         for match in matches:
             # Get the keypoints for this match
             prev_kp_match = prev_kp[match.queryIdx]
             cur_kp_match = kp[match.trainIdx]
+            # Get the points for this match
             prev_pt = prev_kp_match.pt
             cur_pt = cur_kp_match.pt
+
             # If we don't have a predicted center, skip
             if predicted_center is None:
                 continue
-            # Check if the matched keypoint is outside the template bounding box
-            # skip if it is
-            if cur_pt[1] < predicted_center[1]:
-                continue
-            matched_kps.append((prev_kp_match, cur_kp_match))
 
-        # Filter out weak matches by removing matches with a response less than the 0.5 std below the mean response
-        # (responses are an indicator of the quality of the match)
-        responses = [kp.response for kp in kp]
-        mean_response = np.mean(responses)
-        std_response = np.std(responses)
-        matched_kps = [(prev_kp, cur_kp) for prev_kp, cur_kp in matched_kps
-                       if cur_kp.response > mean_response - (std_response * 0.5)]
-
-        for matched_kp in matched_kps:
-            prev_kp_match, cur_kp_match = matched_kp
-            prev_pt = prev_kp_match.pt
-            cur_pt = cur_kp_match.pt
-
-            # Match keypoints with colors such that the same keypoint will have the same color
-            if prev_pt in pt_color_dict:
-                color = pt_color_dict[prev_pt]
-                del pt_color_dict[prev_pt]
-                pt_color_dict[cur_pt] = color
-            else:
-                pt_color_dict[cur_pt] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            # Find the vector from the old point to the new point
+            vector = np.array([cur_pt[0] - prev_pt[0], cur_pt[1] - prev_pt[1]])
+            vectors_frame.append(vector)
 
             # Visualize the matched keypoints
             if debug:
-                cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 5, pt_color_dict[cur_pt], -1)
+                cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 3, (0, 255, 0), -1)
 
-            # Calculate vector from previous point to current point
-            vector = np.array([cur_pt[0] - prev_pt[0], cur_pt[1] - prev_pt[1]])
-
-            # Append matched keypoint and vector to lists
-            vectors_frame.append(vector)
-
+        # Compute the mean vector and remove outliers
         mean_vector = None
-
-        # Compute the mean vector from all points that are not outliers (becaused on their norm)
         if vectors_frame:
             # Remove outliers (based on std)
             norms = np.linalg.norm(vectors_frame, axis=1)
@@ -169,11 +158,18 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
                 # The gray is the old center, the white is the offset based on the optical flow
                 cv2.circle(frame, predicted_center, 5, (100, 100, 100), -1)
                 cv2.circle(frame, offset, 5, (255, 255, 255), -1)
+                # Show the overall optical flow vector for the frame
+                cv2.arrowedLine(frame, (frame.shape[1] // 2, frame.shape[0] // 2),
+                                (int((frame.shape[1] / 2) + mean_vector[0] * 25),
+                                 int(frame.shape[0] / 2 + mean_vector[1] * 25)),
+                                (0, 255, 0), 2)
             predicted_center = offset
 
         # Display the matches
         if debug:
-            cv2.imshow("Matches", frame)
+            cv2.imshow("Matches 2", frame)
+
+    prev_frame = frame
 
     return predicted_center, kp, des
 
@@ -183,19 +179,17 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/speed_template.png", 2, 1)
 
     # Open video file
-    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
+    cap = cv2.VideoCapture("../data/audi_raw_data.mp4")
 
     # Initialize variables
-    template_match_history = []
-    pt_color_dict = {}
     prev_kp, prev_des = None, None
-    predicted_center = None
+    speedometer_center = None
 
     # Skip to frame 3050
-    # cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
 
     while True:
         # Read the next frame
@@ -204,8 +198,8 @@ if __name__ == "__main__":
             break
 
         # Find the speedometer
-        predicted_center, kp, des = find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
-                                                     template_match_history, pt_color_dict, predicted_center,
+        speedometer_center, kp, des = find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
+                                                     speedometer_center,
                                                      threshold=0.2, debug=True)
 
         # Update previous frame and keypoints
@@ -214,12 +208,12 @@ if __name__ == "__main__":
 
         # Flood fill 50 pixels above the predicted center
         # to find the road
-        if predicted_center is not None and predicted_center[1] - 150 > 0:
+        if speedometer_center is not None and speedometer_center[1] - 150 > 0:
             frame = cv2.medianBlur(frame, 5)
-            cv2.floodFill(frame, None, (predicted_center[0], predicted_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
+            cv2.floodFill(frame, None, (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
                           upDiff=(2, 2, 2))
             # mark the flood fill center
-            cv2.circle(frame, (predicted_center[0], predicted_center[1] - 150), 5, (0, 255, 0), -1)
+            cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
 
         # show
         cv2.imshow("Road", frame)
