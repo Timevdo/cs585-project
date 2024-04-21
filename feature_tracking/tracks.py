@@ -80,7 +80,7 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
     # TODO: Make hyper parameters adjustable
     # TODO: make the max jump distance allow depend on how long its been since the last match
     if template_center is not None and len(template_match_history) > 10:
-        if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-5:]]):
+        if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-10:]]):
             predicted_center = template_center
 
     temp_history = template_match_history[-10:]
@@ -183,10 +183,10 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/speed_template.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
 
     # Open video file
-    cap = cv2.VideoCapture("../data/audi_raw_data.mp4")
+    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
 
     # Initialize variables
     template_match_history = []
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     predicted_center = None
 
     # Skip to frame 3050
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
 
     while True:
         # Read the next frame
@@ -216,8 +216,8 @@ if __name__ == "__main__":
         # to find the road
         if predicted_center is not None and predicted_center[1] - 150 > 0:
             frame = cv2.medianBlur(frame, 5)
-            cv2.floodFill(frame, None, (predicted_center[0], predicted_center[1] - 150), (255, 0, 0), loDiff=(3, 3, 3),
-                          upDiff=(3, 3, 3))
+            cv2.floodFill(frame, None, (predicted_center[0], predicted_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
+                          upDiff=(2, 2, 2))
             # mark the flood fill center
             cv2.circle(frame, (predicted_center[0], predicted_center[1] - 150), 5, (0, 255, 0), -1)
 
