@@ -78,8 +78,6 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
                                                                                  threshold=threshold)
     template_match_history += [template_center]
 
-    template_center = template_center if random.Random.uniform(random.Random(), 0, 1) < 0.1 else None
-
     # If a match is found, draw it for debug
     if template_center is not None and debug:
         cv2.rectangle(frame, top_left, bottom_right, (0, 255, 255), 2)
