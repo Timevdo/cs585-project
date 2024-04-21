@@ -41,8 +41,11 @@ prev_kp, prev_des = orb.detectAndCompute(prev_gray, None)
 # Initialize variables to store matched keypoints and their vectors
 matched_keypoints = []
 
+template_match_history = []
+
 # Initialize template for speedometer
-template = cv2.imread("../data/speed_template.png", cv2.IMREAD_GRAYSCALE)
+template1 = cv2.imread("../data/speed_template.png", cv2.IMREAD_GRAYSCALE)
+movement_proxy_template = cv2.imread("../data/movement_proxy.png", cv2.IMREAD_GRAYSCALE)
 
 orginal_center = None
 offset = None
@@ -57,13 +60,26 @@ while True:
         break
 
     # Find the speedometer
-    template_center, top_left, bottom_right = find_speedometer(frame, template, threshold=0.5)
+    template_center, top_left, bottom_right = find_speedometer(frame, template1, threshold=0.0)
+    template_match_history += [template_center]
 
+    # If a match is found, draw it
+    if template_center is not None:
+        cv2.rectangle(frame, top_left, bottom_right, (0, 255, 255), 2)
+        cv2.circle(frame, template_center, 5, (255, 0, 0), -1)
+        cv2.circle(frame, top_left, 5, (255, 0, 255), -1)
+        cv2.circle(frame, bottom_right, 5, (255, 0, 255), -1)
 
-    cv2.rectangle(frame, top_left, bottom_right, (0, 255, 255), 2)
-    cv2.circle(frame, template_center, 5, (255, 0, 0), -1)
-    cv2.circle(frame, top_left, 5, (255, 0, 255), -1)
-    cv2.circle(frame, bottom_right, 5, (255, 0, 255), -1)
+    # Decide whether to set to predicted center to the template center if the template center is found and
+    # we are confident in the match. If the template center has stayed the same for the last ~5 frames, and
+    # the distance between the template center and the predicted center is less than 10 pixels, then we can
+    # be confident in the match.
+    # TODO: Make hyper parameters adjustable
+    if template_center is not None and len(template_match_history) > 5:
+        if all([x is not None and math.dist(template_center, x) < 15 for x in template_match_history[-5:]])\
+                and (predicted_center is None or math.dist(template_center, predicted_center) < 50):
+            predicted_center = template_center
+    template_match_history = template_match_history[-5:]
 
 
     # Convert frame to grayscale
@@ -88,9 +104,16 @@ while True:
             prev_pt = prev_kp_match.pt
             cur_pt = cur_kp_match.pt
 
-            # Check if the matched keypoint is within 100 pixels of the speedometer center
-            if template_center is not None and math.dist(cur_pt, template_center) > 200:
+            # If we don't have a predicted center, skip
+            if predicted_center is None:
                 continue
+
+            # Check if the matched keypoint is outside the template bounding box
+            # skip if it is
+            if top_left is not None and bottom_right is not None:
+                if cur_pt[0] < top_left[0] or cur_pt[0] > bottom_right[0] or cur_pt[1] < top_left[1] or cur_pt[1] > bottom_right[1]:
+                    continue
+
 
             cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 5, (0, 255, 0), -1)
 
@@ -105,15 +128,11 @@ while True:
             mean_vector = np.mean(vectors_frame, axis=0)
 
         # Draw vector
-        if vectors_frame and mean_vector is not None and prev_pt is not None and template_center is not None:
-            if orginal_center is None or offset is None:
-                orginal_center = template_center
-                offset = template_center
-
+        if vectors_frame and mean_vector is not None and prev_pt is not None and predicted_center is not None:
             # Modify the original center by the mean vector
-            offset = (int(offset[0] + mean_vector[0]), int(offset[1] + mean_vector[1]))
+            offset = (int(predicted_center[0] + mean_vector[0]), int(predicted_center[1] + mean_vector[1]))
+            cv2.arrowedLine(frame, predicted_center, offset, (255, 0, 255), 10)
             predicted_center = offset
-            cv2.arrowedLine(frame, orginal_center, offset, (0, 255, 0), 10)
 
 
         # Display the matches
