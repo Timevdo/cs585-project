@@ -124,6 +124,7 @@ def find_speedometer(template_image_path, video_path, threshold=0):
     cv2.destroyAllWindows()
 
 
-template_image_path = 'data/honda_speedometer.png'
-video_path = 'data/honda_highway_footage.mp4'
-find_speedometer(template_image_path, video_path)
+if __name__ == "__main__":
+    template_image_path = 'data/speed_template.png'
+    video_path = 'data/audi_road_cropped.mp4'
+    find_speedometer(template_image_path, video_path)
