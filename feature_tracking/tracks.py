@@ -4,24 +4,54 @@ import random
 import cv2
 import numpy as np
 
-def find_speedometer(frame, template, threshold=0.0):
+
+def find_speedometer_template_matching(frame, templates, threshold=0.0):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    # Get the width and height of the template
-    h, w = template.shape[:2]
-    # Perform template matching
-    result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
 
-    # Find the location of the best match
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+    best_match = None
 
-    # Draw rectangle around the best match
-    if max_val >= threshold:
+    for template in templates:
+        # Get the width and height of the template
+        h, w = template.shape[:2]
+        # Perform template matching
+        result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+
+        # Find the location of the best match
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
         top_left = max_loc
         bottom_right = (top_left[0] + w, top_left[1] + h)
         center = (top_left[0] + w // 2, top_left[1] + h // 2)
-        return center, top_left, bottom_right
+
+        if best_match is None or max_val > best_match[0]:
+            best_match = (max_val, center, top_left, bottom_right)
+
+    # Draw rectangle around the best match
+    if best_match[0] >= threshold:
+        return best_match[1], best_match[2], best_match[3]
 
     return None, None, None
+
+
+def load_template_pyramid(template_path, down_levels, up_levels, scale_factor=0.9):
+    assert 0 < scale_factor < 1
+
+    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+    template_pyramid = [template]
+    for i in range(1, down_levels + 1):
+        template = cv2.resize(template, (
+            int(template.shape[1] * scale_factor ** down_levels),
+            int(template.shape[0] * scale_factor ** down_levels)
+        ))
+        template_pyramid.append(template)
+    for i in range(1, up_levels + 1):
+        template = cv2.resize(template, (
+            int(template.shape[1] / (scale_factor ** down_levels)),
+            int(template.shape[0] / (scale_factor ** down_levels))
+        ))
+        template_pyramid.append(template)
+    return template_pyramid
+
 
 # Initialize feature detector
 orb = cv2.ORB.create()
@@ -39,14 +69,10 @@ prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
 # Find keypoints and descriptors in the first frame
 prev_kp, prev_des = orb.detectAndCompute(prev_gray, None)
 
-# Initialize variables to store matched keypoints and their vectors
-matched_keypoints = []
-
 template_match_history = []
 
 # Initialize template for speedometer
-template1 = cv2.imread("../data/speed_template.png", cv2.IMREAD_GRAYSCALE)
-movement_proxy_template = cv2.imread("../data/movement_proxy.png", cv2.IMREAD_GRAYSCALE)
+speedometer_templates = load_template_pyramid("../data/speed_template.png", 2, 1)
 
 orginal_center = None
 offset = None
@@ -63,7 +89,7 @@ while True:
         break
 
     # Find the speedometer
-    template_center, top_left, bottom_right = find_speedometer(frame, template1, threshold=0.0)
+    template_center, top_left, bottom_right = find_speedometer_template_matching(frame, speedometer_templates, threshold=0.0)
     template_match_history += [template_center]
 
     # If a match is found, draw it
@@ -81,7 +107,6 @@ while True:
         if all([x is not None and math.dist(template_center, x) < 15 for x in template_match_history[-5:]]):
             predicted_center = template_center
     template_match_history = template_match_history[-10:]
-
 
     # Convert frame to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -121,7 +146,6 @@ while True:
             if cur_pt[1] < predicted_center[1]:
                 continue
 
-
             cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 5, pt_color_dict[cur_pt], -1)
 
             # Calculate vector from previous point to current point
@@ -146,10 +170,8 @@ while True:
             cv2.arrowedLine(frame, predicted_center, offset, (255, 0, 255), 10)
             predicted_center = offset
 
-
         # Display the matches
         cv2.imshow("Matches", frame)
-
 
     # Update previous frame and keypoints
     prev_gray = gray.copy()
