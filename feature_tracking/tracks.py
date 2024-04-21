@@ -1,4 +1,5 @@
 import math
+import random
 
 import cv2
 import numpy as np
@@ -51,7 +52,9 @@ orginal_center = None
 offset = None
 predicted_center = None
 
-cap.set(cv2.CAP_PROP_POS_FRAMES, 1350)
+cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
+
+pt_color_dict = {}
 
 while True:
     # Read the next frame
@@ -71,15 +74,13 @@ while True:
         cv2.circle(frame, bottom_right, 5, (255, 0, 255), -1)
 
     # Decide whether to set to predicted center to the template center if the template center is found and
-    # we are confident in the match. If the template center has stayed the same for the last ~5 frames, and
-    # the distance between the template center and the predicted center is less than 10 pixels, then we can
-    # be confident in the match.
+    # we are confident in the match. If the template center has stayed the same for the last ~10 frames
     # TODO: Make hyper parameters adjustable
-    if template_center is not None and len(template_match_history) > 5:
-        if all([x is not None and math.dist(template_center, x) < 15 for x in template_match_history[-5:]])\
-                and (predicted_center is None or math.dist(template_center, predicted_center) < 50):
+    # TODO: make the max jump distance allow depend on how long its been since the last match
+    if template_center is not None and len(template_match_history) > 10:
+        if all([x is not None and math.dist(template_center, x) < 15 for x in template_match_history[-5:]]):
             predicted_center = template_center
-    template_match_history = template_match_history[-5:]
+    template_match_history = template_match_history[-10:]
 
 
     # Convert frame to grayscale
@@ -104,18 +105,24 @@ while True:
             prev_pt = prev_kp_match.pt
             cur_pt = cur_kp_match.pt
 
+            if prev_pt in pt_color_dict:
+                color = pt_color_dict[prev_pt]
+                del pt_color_dict[prev_pt]
+                pt_color_dict[cur_pt] = color
+            else:
+                pt_color_dict[cur_pt] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
             # If we don't have a predicted center, skip
             if predicted_center is None:
                 continue
 
             # Check if the matched keypoint is outside the template bounding box
             # skip if it is
-            if top_left is not None and bottom_right is not None:
-                if cur_pt[0] < top_left[0] or cur_pt[0] > bottom_right[0] or cur_pt[1] < top_left[1] or cur_pt[1] > bottom_right[1]:
-                    continue
+            if cur_pt[1] < predicted_center[1]:
+                continue
 
 
-            cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 5, (0, 255, 0), -1)
+            cv2.circle(frame, (int(cur_pt[0]), int(cur_pt[1])), 5, pt_color_dict[cur_pt], -1)
 
             # Calculate vector from previous point to current point
             vector = np.array([cur_pt[0] - prev_pt[0], cur_pt[1] - prev_pt[1]])
@@ -123,8 +130,13 @@ while True:
             # Append matched keypoint and vector to lists
             vectors_frame.append(vector)
 
-        # Compute the mean vector for this frame
+        # Compute the mean vector from the top 25% of the vectors that moved the least
         if vectors_frame:
+            # Sort vectors by magnitude
+            vectors_frame.sort(key=lambda x: np.linalg.norm(x))
+            # Get the top 25% of the vectors that moved the least
+            vectors_frame = vectors_frame[:int(len(vectors_frame) * 0.25)]
+            # Compute the mean vector
             mean_vector = np.mean(vectors_frame, axis=0)
 
         # Draw vector
