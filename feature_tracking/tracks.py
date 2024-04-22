@@ -30,7 +30,7 @@ def find_speedometer_template_matching(frame, templates, threshold=0.0):
     if best_match[0] >= threshold:
         return best_match[1], best_match[2], best_match[3], best_match[4]
 
-    return None, None, None
+    return None, None, None, None
 
 
 def load_template_pyramid(template_path, down_levels, up_levels, scale_factor=0.9):
@@ -171,7 +171,7 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
 
     prev_frame = frame
 
-    return predicted_center, kp, des
+    return predicted_center, kp, des, top_left, bottom_right
 
 
 if __name__ == "__main__":
@@ -179,10 +179,14 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/speed_template.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
 
     # Open video file
-    cap = cv2.VideoCapture("../data/audi_raw_data.mp4")
+    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
+
+    if not cap.isOpened():
+        print("Error: Could not open video.")
+        exit()
 
     # Initialize variables
     prev_kp, prev_des = None, None
@@ -198,7 +202,7 @@ if __name__ == "__main__":
             break
 
         # Find the speedometer
-        speedometer_center, kp, des = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des, speedometer_templates,
+        speedometer_center, kp, des, t_l, b_r = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des, speedometer_templates,
                                                      speedometer_center,
                                                      threshold=0.2, debug=False)
 
