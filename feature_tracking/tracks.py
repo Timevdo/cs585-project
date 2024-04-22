@@ -189,7 +189,7 @@ if __name__ == "__main__":
     speedometer_center = None
 
     # Skip to frame 3050
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 3050)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 4050)
 
     while True:
         # Read the next frame
@@ -198,22 +198,45 @@ if __name__ == "__main__":
             break
 
         # Find the speedometer
-        speedometer_center, kp, des = find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
+        speedometer_center, kp, des = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des, speedometer_templates,
                                                      speedometer_center,
-                                                     threshold=0.2, debug=True)
+                                                     threshold=0.2, debug=False)
 
         # Update previous frame and keypoints
         prev_kp = kp
         prev_des = des
 
-        # Flood fill 50 pixels above the predicted center
+        # Flood fill 150 pixels above the predicted center
         # to find the road
         if speedometer_center is not None and speedometer_center[1] - 150 > 0:
-            frame = cv2.medianBlur(frame, 5)
-            cv2.floodFill(frame, None, (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
+            road_detect = cv2.medianBlur(frame, 7)
+            retval, image, mask, rect = cv2.floodFill(road_detect, None, (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
                           upDiff=(2, 2, 2))
-            # mark the flood fill center
-            cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
+            # apply mask on top of the frame
+            mask = mask[:frame.shape[0], :frame.shape[1]]
+            frame[mask != 0] = (0, 0, 0)
+
+            # Make countours
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # Draw the contours with the largest area
+            if contours:
+                sorted_contours = sorted(contours, key=cv2.contourArea)
+                cv2.drawContours(frame, [sorted_contours[-1]], -1, (0, 0, 255), 2)
+
+                # Find the top most point of the contour
+                top_most_point = tuple(sorted_contours[-1][sorted_contours[-1][:, :, 1].argmin()][0])
+                cv2.circle(frame, top_most_point, 5, (0, 255, 0), -1)
+
+                # mark the flood fill center
+                cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
+
+                # Calculate road angle
+                x1, y1 = (speedometer_center[0], speedometer_center[1] - 150)
+                x2, y2 = top_most_point
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                road_angle = np.rad2deg(np.arctan2((y2 - y1), (x2 - x1)))
+                cv2.putText(frame, f"Road Angle: {road_angle:.2f}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
 
         # show
         cv2.imshow("Road", frame)
