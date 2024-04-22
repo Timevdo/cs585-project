@@ -179,7 +179,7 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/audi_logo.png", 2, 1)
 
     # Open video file
     cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     speedometer_center = None
 
     # Skip to frame 3050
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 4050)
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 4050)
 
     while True:
         # Read the next frame
@@ -204,7 +204,7 @@ if __name__ == "__main__":
         # Find the speedometer
         speedometer_center, kp, des, t_l, b_r = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des, speedometer_templates,
                                                      speedometer_center,
-                                                     threshold=0.2, debug=False)
+                                                     threshold=0.2, debug=True)
 
         # Update previous frame and keypoints
         prev_kp = kp
