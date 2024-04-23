@@ -46,7 +46,9 @@ def find_angle_of_least_inertia(img):
     cv2.putText(img, f'{theta}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
     cv2.imshow("Angle of Least Inertia Image", img)
 
-    steering_angle = (np.pi / 2 - theta) if (theta > 0) else (-1 * (np.pi / 2 - abs(theta)))
+    # steering_angle = (np.pi / 2 - theta) if (theta > 0) else (-1 * (np.pi / 2 - abs(theta)))
+    steering_angle = np.sign(theta) * (np.pi / 2 - abs(theta))
+    
     return np.rad2deg(steering_angle)
 
 
