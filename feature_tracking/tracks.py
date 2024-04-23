@@ -89,7 +89,7 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
     # we are confident in the match. If the template center has stayed the same for the last ~10 frames
     # TODO: Make hyper parameters adjustable
     # TODO: make the max jump distance allow depend on how long its been since the last match
-    if template_center is not None and len(template_match_history) > 7:
+    if template_center is not None and len(template_match_history) > 10:
         if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-7:]]):
             predicted_center = template_center
 
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/audi_logo.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
 
     # Open video file
     cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")

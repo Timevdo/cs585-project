@@ -96,6 +96,9 @@ if __name__ == "__main__":
         # Extract the region of interest (ROI) from the frame
         steering_subimage = frame[b_r[1]:, t_l[0]:b_r[0]]
 
+        if 0 in steering_subimage.shape:
+            continue
+
         # Convert image to grayscale
         gray = cv2.cvtColor(steering_subimage, cv2.COLOR_BGR2GRAY)
 
@@ -108,6 +111,10 @@ if __name__ == "__main__":
 
         # Find contours
         contours, _ = cv2.findContours(dilated_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # If no contours, continue
+        if len(contours) == 0:
+            continue
 
         # Find the largest contour
         largest_contour = max(contours, key=cv2.contourArea)
