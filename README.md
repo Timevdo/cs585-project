@@ -1,7 +1,7 @@
 # CS585 Final Project - Predicting the Steering Angle of a Car for Autonomous Driving
 ## Team Members
 - Muhammad Aseef Imran
-- Munir A. Siddiqui
+- Munir Siddiqui
 - Tim Evdokimov
 
 ## Problem Definition

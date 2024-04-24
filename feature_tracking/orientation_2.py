@@ -57,7 +57,7 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Load template image of steering wheel logo
-    speedometer_template_path = "../data/audi_speedometer.png"
+    speedometer_template_path = "../data/aston_martin_speedometer.png"
 
     if not os.path.exists(speedometer_template_path):
         print("Error: Could not find speedometer template.")
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     assert len(speedometer_templates) > 0
 
     # Open video file
-    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
+    cap = cv2.VideoCapture("../data/aston_martin_highway_footage.mp4")
 
     if not cap.isOpened():
         print("Error: Could not open video.")
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         gray = cv2.cvtColor(steering_subimage, cv2.COLOR_BGR2GRAY)
 
         # Use Canny edge detection to find edges
-        edges = cv2.Canny(gray, 50, 150)
+        edges = cv2.Canny(gray, 255/3, 255)
 
         # Apply dilation to enhance the edges
         kernel = np.ones((5, 5), np.uint8)
