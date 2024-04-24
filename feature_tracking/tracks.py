@@ -4,6 +4,9 @@ import random
 import cv2
 import numpy as np
 
+from feature_tracking.alpha_beta_filter import AlphaBeta
+
+
 def find_speedometer_template_matching(frame, templates, predicted_center, threshold=0.0):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -77,9 +80,11 @@ prev_frame = None
 pt_color_dict = {}
 template_match_history = []
 
+alpha_beta_filter_speedometer = None
+speed_dt = 0
 
 def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
-                     predicted_center, threshold=0.2, debug=False):
+                     predicted_center, threshold=0.2, apply_filtering=True, debug=False):
 
     global prev_frame
     global pt_color_dict
@@ -180,6 +185,26 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
 
     prev_frame = frame
 
+    # Apply filtering
+    if apply_filtering:
+        global speed_dt
+        global alpha_beta_filter_speedometer
+        speed_dt += 1
+        if alpha_beta_filter_speedometer is None and predicted_center is not None:
+            alpha_beta_filter_speedometer = AlphaBeta(alpha=0.2, beta=0.005, initial_position=predicted_center)
+            speed_dt = 0
+        elif alpha_beta_filter_speedometer is not None and predicted_center is not None:
+            predicted_center = np.array(predicted_center)
+            predicted_center = alpha_beta_filter_speedometer.update(predicted_center, speed_dt)
+            predicted_center = predicted_center.astype(np.int32)
+            predicted_center = tuple(predicted_center)
+            speed_dt = 0
+        elif alpha_beta_filter_speedometer is not None and predicted_center is None:
+            predicted_center = alpha_beta_filter_speedometer.predict(speed_dt)
+            predicted_center = predicted_center.astype(np.int32)
+            predicted_center = tuple(predicted_center)
+            speed_dt = 0
+
     return predicted_center, kp, des, top_left, bottom_right
 
 def get_road_angle(speedometer_center, frame, debug):
@@ -189,10 +214,18 @@ def get_road_angle(speedometer_center, frame, debug):
     if speedometer_center is not None and speedometer_center[1] - 150 > 0:
         # road_detect = cv2.medianBlur(frame, 7) # very expensive and doesnt seem to improve results by THAT much
         road_detect = frame.copy()
-        retval, image, mask, rect = cv2.floodFill(road_detect, None,
-                                                  (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0),
-                                                  loDiff=(2, 2, 2),
-                                                  upDiff=(2, 2, 2))
+
+        masks = []
+        for i in range(-120, 121, 10):
+            _, _, new_mask, _ = cv2.floodFill(road_detect, None, (speedometer_center[0] + i, speedometer_center[1] - 150),
+                                          (255, 0, 0), loDiff=(3, 3, 3), upDiff=(2, 2, 2))
+            masks.append(new_mask)
+
+        # Combine masks
+        mask = np.zeros_like(masks[0])
+        for m in masks:
+            mask = cv2.bitwise_or(mask, m)
+
         # apply mask on top of the frame
         mask = mask[:frame.shape[0], :frame.shape[1]]
         frame[mask != 0] = (0, 0, 0)
@@ -202,18 +235,31 @@ def get_road_angle(speedometer_center, frame, debug):
         # Draw the contours with the largest area
         if contours:
             sorted_contours = sorted(contours, key=cv2.contourArea)
-            cv2.drawContours(frame, [sorted_contours[-1]], -1, (0, 0, 255), 2)
+            # combine top 2 contours
+            main_contour = np.concatenate((sorted_contours[-1], sorted_contours[-2]), axis=0) \
+                if len(contours) > 1 else sorted_contours[-1]
+            cv2.drawContours(frame, [main_contour], -1, (0, 0, 255), 2)
+
 
             # Find the top most point of the contour
-            top_most_point = tuple(sorted_contours[-1][sorted_contours[-1][:, :, 1].argmin()][0])
-            cv2.circle(frame, top_most_point, 5, (0, 255, 0), -1)
-
-            # mark the flood fill center
-            cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
+            top_most_point = tuple(main_contour[main_contour[:, :, 1].argmin()][0])
+            # Find all pixels with in 5 pixels of the top most point
+            close_points = [point for point in main_contour if abs(point[0][1] - top_most_point[1]) < 5]
+            for cp in close_points:
+                cv2.circle(frame, tuple(cp[0]), 5, (0, 255, 0), -1)
+            # Find the average x value of the close points
+            avg_x = np.mean([cp[0][0] for cp in close_points])
+            #cv2.circle(frame, (int(avg_x), top_most_point[1]), 5, (255, 0, 0), -1)
+            #cv2.imshow("Road", frame)
+            #return
+            # mark the flood fill seeds
+            for i in range(-120, 121, 10):
+                cv2.circle(frame, (speedometer_center[0] + i, speedometer_center[1] - 150), 3, (255, 0, 0), -1)
 
             # Calculate road angle
             x1, y1 = (speedometer_center[0], speedometer_center[1] - 150)
-            x2, y2 = top_most_point
+            x2, y2 = int(avg_x), top_most_point[1]
+
             cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
             road_angle = np.rad2deg(np.arctan2((y2 - y1), (x2 - x1)))
             cv2.putText(frame, f"Road Angle: {road_angle:.2f}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
