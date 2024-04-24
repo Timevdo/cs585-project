@@ -179,10 +179,10 @@ if __name__ == "__main__":
     orb, bf = init_feature_tracking()
 
     # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
+    speedometer_templates = load_template_pyramid("../data/aston_martin_speedometer.png", 2, 1)
 
     # Open video file
-    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
+    cap = cv2.VideoCapture("../data/aston_martin_highway_footage.mp4")
 
     if not cap.isOpened():
         print("Error: Could not open video.")
