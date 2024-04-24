@@ -4,20 +4,31 @@ import random
 import cv2
 import numpy as np
 
-
-def find_speedometer_template_matching(frame, templates, threshold=0.0):
+def find_speedometer_template_matching(frame, templates, predicted_center, threshold=0.0):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # crop the frame to the most likely area of the speedometer (to save performance)
+    # 80% of the time; not 100% to allow for correction in case predicted_center is wrong
+    # we want to be able to recover from a bad prediction
+    if predicted_center is not None and random.uniform(0, 1) > 0.8:
+        gray = gray[
+                   max(predicted_center[1] - 250, 0):min(predicted_center[1] + 250,
+                   frame.shape[0]), max(predicted_center[0] - 250, 0):min(predicted_center[0] + 250,
+                   frame.shape[1])
+               ]
 
     best_match = None
 
     for template in templates:
         # Get the width and height of the template
         h, w = template.shape[:2]
+        assert h > 0 and w > 0
+        assert h < gray.shape[0] and w < gray.shape[1]
         # Perform template matching
         result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
 
         # Find the location of the best match
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        _, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
         top_left = max_loc
         bottom_right = (top_left[0] + w, top_left[1] + h)
@@ -34,23 +45,24 @@ def find_speedometer_template_matching(frame, templates, threshold=0.0):
 
 
 def load_template_pyramid(template_path, down_levels, up_levels, scale_factor=0.9):
-    assert 0 < scale_factor < 1
-
-    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-    template_pyramid = [template]
-    for i in range(1, down_levels + 1):
-        template = cv2.resize(template, (
-            int(template.shape[1] * scale_factor ** down_levels),
-            int(template.shape[0] * scale_factor ** down_levels)
-        ))
-        template_pyramid.append(template)
-    for i in range(1, up_levels + 1):
-        template = cv2.resize(template, (
-            int(template.shape[1] / (scale_factor ** down_levels)),
-            int(template.shape[0] / (scale_factor ** down_levels))
-        ))
-        template_pyramid.append(template)
-    return template_pyramid
+        assert 0 < scale_factor < 1
+        # TODO: likely possible to create higher quality templates using https://docs.opencv.org/4.x/dc/dff/tutorial_py_pyramids.html
+        #  This using laplacian pyramids to create a more accurate template true to the edges of the original image
+        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        template_pyramid = [template]
+        for i in range(1, down_levels + 1):
+            template = cv2.resize(template, (
+                int(template.shape[1] * scale_factor ** down_levels),
+                int(template.shape[0] * scale_factor ** down_levels)
+            ))
+            template_pyramid.append(template)
+        for i in range(1, up_levels + 1):
+            template = cv2.resize(template, (
+                int(template.shape[1] / (scale_factor ** down_levels)),
+                int(template.shape[0] / (scale_factor ** down_levels))
+            ))
+            template_pyramid.append(template)
+        return template_pyramid
 
 
 def init_feature_tracking():
@@ -74,7 +86,7 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
     global template_match_history
 
     # Find the speedometer
-    template_center, top_left, bottom_right, matched_template = find_speedometer_template_matching(frame, speedometer_templates,
+    template_center, top_left, bottom_right, matched_template = find_speedometer_template_matching(frame, speedometer_templates, predicted_center,
                                                                                  threshold=threshold)
     template_match_history += [template_center]
 
@@ -86,19 +98,19 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
         cv2.circle(frame, bottom_right, 5, (255, 0, 255), -1)
 
     # Decide whether to set to predicted center to the template center if the template center is found and
-    # we are confident in the match. If the template center has stayed the same for the last ~10 frames
+    # we are confident in the match. If the template center has stayed the same for the last ~30 frames
     # TODO: Make hyper parameters adjustable
     # TODO: make the max jump distance allow depend on how long its been since the last match
-    if template_center is not None and len(template_match_history) > 10:
-        if all([x is not None and math.dist(template_center, x) < 25 for x in template_match_history[-7:]]):
+    if template_center is not None and len(template_match_history) >= 5:
+        if all([x is not None and math.dist(template_center, x) < 10 for x in template_match_history[-5:]]):
             predicted_center = template_center
 
-    temp_history = template_match_history[-10:]
+    temp_history = template_match_history[-5:]
     template_match_history.clear()
     template_match_history.extend(temp_history)
 
     # Mask the frame to the region of interest (which is everything below the top left corner of the speedometer)
-    if predicted_center is not None:
+    if predicted_center is not None and matched_template is not None:
         frame[:predicted_center[1] - matched_template.shape[0] // 2, :] = (0, 0, 0)
 
     # Find keypoints and descriptors in the current frame
@@ -111,9 +123,6 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
 
         # Sort the matches by distance
         matches = sorted(matches, key=lambda x: x.distance)
-
-        # Take the top 25% of the strongest matches
-        #matches = matches[:len(matches) // 4]
 
         # Initialize variables to store matched keypoints and their vectors for this frame
         vectors_frame = []
@@ -146,7 +155,7 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
             norms = np.linalg.norm(vectors_frame, axis=1)
             mean_norm = np.mean(norms)
             std_norm = np.std(norms)
-            vectors_frame = [v for i, v in enumerate(vectors_frame) if norms[i] < mean_norm + (1.5 * std_norm)]
+            vectors_frame = [v for i, v in enumerate(vectors_frame) if norms[i] < mean_norm + (1. * std_norm)]
             # Compute the mean vector
             mean_vector = np.mean(vectors_frame, axis=0)
 
@@ -173,82 +182,44 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
 
     return predicted_center, kp, des, top_left, bottom_right
 
+def get_road_angle(speedometer_center, frame, debug):
+    road_angle = None
+    # Flood fill 150 pixels above the predicted center
+    # to find the road
+    if speedometer_center is not None and speedometer_center[1] - 150 > 0:
+        # road_detect = cv2.medianBlur(frame, 7) # very expensive and doesnt seem to improve results by THAT much
+        road_detect = frame.copy()
+        retval, image, mask, rect = cv2.floodFill(road_detect, None,
+                                                  (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0),
+                                                  loDiff=(2, 2, 2),
+                                                  upDiff=(2, 2, 2))
+        # apply mask on top of the frame
+        mask = mask[:frame.shape[0], :frame.shape[1]]
+        frame[mask != 0] = (0, 0, 0)
 
-if __name__ == "__main__":
-    # Initialize feature detector
-    orb, bf = init_feature_tracking()
+        # Make countours
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Draw the contours with the largest area
+        if contours:
+            sorted_contours = sorted(contours, key=cv2.contourArea)
+            cv2.drawContours(frame, [sorted_contours[-1]], -1, (0, 0, 255), 2)
 
-    # Initialize template for speedometer
-    speedometer_templates = load_template_pyramid("../data/audi_speedometer.png", 2, 1)
+            # Find the top most point of the contour
+            top_most_point = tuple(sorted_contours[-1][sorted_contours[-1][:, :, 1].argmin()][0])
+            cv2.circle(frame, top_most_point, 5, (0, 255, 0), -1)
 
-    # Open video file
-    cap = cv2.VideoCapture("../data/audi_gravel_road_footage.mp4")
+            # mark the flood fill center
+            cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
 
-    if not cap.isOpened():
-        print("Error: Could not open video.")
-        exit()
+            # Calculate road angle
+            x1, y1 = (speedometer_center[0], speedometer_center[1] - 150)
+            x2, y2 = top_most_point
+            cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            road_angle = np.rad2deg(np.arctan2((y2 - y1), (x2 - x1)))
+            cv2.putText(frame, f"Road Angle: {road_angle:.2f}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-    # Initialize variables
-    prev_kp, prev_des = None, None
-    speedometer_center = None
-
-    # Skip to frame 3050
-    # cap.set(cv2.CAP_PROP_POS_FRAMES, 4050)
-
-    while True:
-        # Read the next frame
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Find the speedometer
-        speedometer_center, kp, des, t_l, b_r = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des, speedometer_templates,
-                                                     speedometer_center,
-                                                     threshold=0.2, debug=True)
-
-        # Update previous frame and keypoints
-        prev_kp = kp
-        prev_des = des
-
-        # Flood fill 150 pixels above the predicted center
-        # to find the road
-        if speedometer_center is not None and speedometer_center[1] - 150 > 0:
-            road_detect = cv2.medianBlur(frame, 7)
-            retval, image, mask, rect = cv2.floodFill(road_detect, None, (speedometer_center[0], speedometer_center[1] - 150), (255, 0, 0), loDiff=(2, 2, 2),
-                          upDiff=(2, 2, 2))
-            # apply mask on top of the frame
-            mask = mask[:frame.shape[0], :frame.shape[1]]
-            frame[mask != 0] = (0, 0, 0)
-
-            # Make countours
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # Draw the contours with the largest area
-            if contours:
-                sorted_contours = sorted(contours, key=cv2.contourArea)
-                cv2.drawContours(frame, [sorted_contours[-1]], -1, (0, 0, 255), 2)
-
-                # Find the top most point of the contour
-                top_most_point = tuple(sorted_contours[-1][sorted_contours[-1][:, :, 1].argmin()][0])
-                cv2.circle(frame, top_most_point, 5, (0, 255, 0), -1)
-
-                # mark the flood fill center
-                cv2.circle(frame, (speedometer_center[0], speedometer_center[1] - 150), 5, (0, 255, 0), -1)
-
-                # Calculate road angle
-                x1, y1 = (speedometer_center[0], speedometer_center[1] - 150)
-                x2, y2 = top_most_point
-                cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                road_angle = np.rad2deg(np.arctan2((y2 - y1), (x2 - x1)))
-                cv2.putText(frame, f"Road Angle: {road_angle:.2f}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-
-        # show
+    # show
+    if debug:
         cv2.imshow("Road", frame)
 
-        # Check for key press to exit
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # Release video capture object and close windows
-    cap.release()
-    cv2.destroyAllWindows()
+    return road_angle
