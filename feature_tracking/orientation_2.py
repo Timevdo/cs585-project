@@ -51,6 +51,48 @@ def find_angle_of_least_inertia(img):
     
     return np.rad2deg(steering_angle)
 
+def get_steering_angle(speed_bottom_right, speed_top_left, frame, debug=False):
+    # Extract the region of interest (ROI) from the frame
+    steering_subimage = frame[speed_bottom_right[1]:, speed_top_left[0]:speed_bottom_right[0]]
+
+    if 0 in steering_subimage.shape:
+        return None
+
+    # Convert image to grayscale
+    gray = cv2.cvtColor(steering_subimage, cv2.COLOR_BGR2GRAY)
+
+    # Use Canny edge detection to find edges
+    edges = cv2.Canny(gray, 50, 150)
+
+    # Apply dilation to enhance the edges
+    kernel = np.ones((5, 5), np.uint8)
+    dilated_edges = cv2.dilate(edges, kernel, iterations=1)
+
+    # Find contours
+    contours, _ = cv2.findContours(dilated_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if debug:
+        cv2.imshow("Dilated Edges", dilated_edges)
+
+    # If no contours, continue
+    if len(contours) == 0:
+        return None
+
+    # Find the largest contour
+    largest_contour = max(contours, key=cv2.contourArea)
+
+    # Create a mask image for the largest contour
+    mask = np.zeros_like(gray)
+    cv2.drawContours(mask, [largest_contour], -1, (255), thickness=cv2.FILLED)
+
+    # Apply the mask to the edge-detected image
+    masked_edges = cv2.bitwise_and(edges, edges, mask=mask)
+
+    # Calculate angle of least inertia for the masked edges
+    steering_angle = find_angle_of_least_inertia(masked_edges)
+
+    return steering_angle
+
 
 if __name__ == "__main__":
     # Initialize feature detector
