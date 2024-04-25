@@ -34,8 +34,8 @@ if __name__ == "__main__":
     dt_road = 0
     dt_steering = 0
 
-    # Skip to frame 3050
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 3100)
+    # Skip to frame 3000
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 3000)
 
     wheel_angle_history = []
     road_angle_history = []
@@ -71,7 +71,7 @@ if __name__ == "__main__":
             original_road_angle.append(original_road_angle[-1])
 
         if alpha_beta_filter_road_angle is None and road_angle is not None:
-            alpha_beta_filter_road_angle = AlphaBeta(alpha=0.05, beta=0.001, initial_position=road_angle)
+            alpha_beta_filter_road_angle = AlphaBeta(alpha=0.06, beta=0.003, initial_position=road_angle)
             dt_road = 0
         elif alpha_beta_filter_road_angle is not None and road_angle is not None:
             road_angle = alpha_beta_filter_road_angle.update(road_angle, dt_road)
@@ -127,17 +127,26 @@ if __name__ == "__main__":
     wheel_angle_history = np.array(wheel_angle_history)
     road_angle_history = np.array(road_angle_history)
 
+    print(original_wheel_angle)
+    print(original_road_angle)
+
+    plt.title("Steering angle vs Road angle (Original)")
     plt.plot(original_wheel_angle, label="Original wheel angle")
     plt.plot(original_road_angle, label="Original road angle")
+    plt.legend()
     plt.show()
 
+    plt.title("Steering angle vs Road angle (Filtered)")
     plt.plot(wheel_angle_history, label="Wheel angle")
     plt.plot(road_angle_history, label="Road angle")
     plt.legend()
     plt.show()
 
     # The phase shift needed to align the road angle with the wheel angle
-    HIST_COEF = 50
+    # this is because the curve you need to turn is AHEAD of you
+    # so you must use past information to predict the steering angle
+    # and NOT current information
+    HIST_COEF = 100
 
     road_angle_ts = []
     wheel_angle_ts = []
@@ -145,8 +154,7 @@ if __name__ == "__main__":
     for i in range(len(road_angle_history)):
         if i < HIST_COEF:
             continue
-
-        road_angle_ts.append(road_angle_history[i + HIST_COEF:i])
+        road_angle_ts.append(road_angle_history[i-HIST_COEF:i])
         wheel_angle_ts.append(wheel_angle_history[i])
 
     road_angle_ts_arr = np.array(road_angle_ts)
@@ -162,4 +170,7 @@ if __name__ == "__main__":
     print(yp.shape)
 
     print("R2", r2_score(wheel_angle_ts_arr, yp))
-    print("MSE", mean_squared_error(wheel_angle_ts_arr, yp) ** 0.5)
+    print("RMSE", mean_squared_error(wheel_angle_ts_arr, yp, squared=False))
+
+    # evaluate the model again this
+    #cap.set(cv2.CAP_PROP_POS_FRAMES, 8000)

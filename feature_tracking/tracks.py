@@ -225,19 +225,32 @@ def get_road_angle(speedometer_center, frame, debug):
         mask = np.zeros_like(masks[0])
         for m in masks:
             mask = cv2.bitwise_or(mask, m)
+        # Dilate mask
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.dilate(mask, kernel, iterations=1)
 
         # apply mask on top of the frame
         mask = mask[:frame.shape[0], :frame.shape[1]]
         frame[mask != 0] = (0, 0, 0)
 
+        # show mask as white
+        visual_mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        visual_mask[mask != 0] = (255, 255, 255)
+        if debug:
+            cv2.imshow("Mask", visual_mask)
+
+        # Invert the mask for contour detection
+        mask[mask == 0] = 255
+        mask[mask == 1] = 0
+
         # Make countours
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         # Draw the contours with the largest area
         if contours:
             sorted_contours = sorted(contours, key=cv2.contourArea)
-            # combine top 2 contours
-            main_contour = np.concatenate((sorted_contours[-1], sorted_contours[-2]), axis=0) \
-                if len(contours) > 1 else sorted_contours[-1]
+            # the largest contour is the whole image, so we want the second largest
+            # which is just the road
+            main_contour = sorted_contours[-2] if len(sorted_contours) > 1 else sorted_contours[-1]
             cv2.drawContours(frame, [main_contour], -1, (0, 0, 255), 2)
 
 
