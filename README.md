@@ -4,6 +4,10 @@
 - Munir Siddiqui
 - Tim Evdokimov
 
+## Instructions
+To run the demo, run `python3 main.py`
+
+Most of the interesting stuff is in `feature_tracking`, and in `audi_workbook.ipynb` and `model.ipynb`
 
 
 ## Credits and Bibliography
