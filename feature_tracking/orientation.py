@@ -2,7 +2,7 @@ import math
 
 import cv2
 
-from tracks import *
+from feature_tracking.tracks import *
 
 def create_rotated_templates(template_path, rot_delta):
     template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
