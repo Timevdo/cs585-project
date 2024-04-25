@@ -13,12 +13,12 @@ def find_speedometer_template_matching(frame, templates, predicted_center, thres
     # crop the frame to the most likely area of the speedometer (to save performance)
     # 80% of the time; not 100% to allow for correction in case predicted_center is wrong
     # we want to be able to recover from a bad prediction
-    if predicted_center is not None and random.uniform(0, 1) > 0.8:
-        gray = gray[
-                   max(predicted_center[1] - 250, 0):min(predicted_center[1] + 250,
-                   frame.shape[0]), max(predicted_center[0] - 250, 0):min(predicted_center[0] + 250,
-                   frame.shape[1])
-               ]
+    #if predicted_center is not None and random.uniform(0, 1) > 0.8:
+    #    gray = gray[
+    #               max(predicted_center[1] - 250, 0):min(predicted_center[1] + 250,
+    #               frame.shape[0]), max(predicted_center[0] - 250, 0):min(predicted_center[0] + 250,
+    #               frame.shape[1])
+    #           ]
 
     best_match = None
 
