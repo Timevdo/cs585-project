@@ -3,7 +3,7 @@ import random
 
 import cv2 as cv
 import numpy as np
-import feature_tracking.tracks
+import feature_tracking.speedometer_tracker
 
 img1 = cv.imread('../data/20240421_154842.png')
 img2 = cv.imread('../data/20240421_154905.png')

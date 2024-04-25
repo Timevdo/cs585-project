@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import pytesseract
 
-from feature_tracking.tracks import *
+from feature_tracking.speedometer_tracker import *
 
 def extract_speed_from_roi(frame):
     # x, y, w, h = roi

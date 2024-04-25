@@ -1,13 +1,12 @@
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.svm import SVR
 
 from feature_tracking.alpha_beta_filter import AlphaBeta
-from feature_tracking.orientation_2 import find_angle_of_least_inertia, get_steering_angle
-from feature_tracking.tracks import init_feature_tracking, load_template_pyramid, find_speedometer, get_road_angle
-from sklearn.linear_model import LinearRegression
-from sklearn.svm import SVR
-from sklearn.metrics import r2_score, mean_squared_error
+from feature_tracking.orientation_2 import get_steering_angle
+from feature_tracking.speedometer_tracker import init_feature_tracking, load_template_pyramid, find_speedometer, get_road_angle
 
 
 def run(start_frame=3000, frames_to_process=500):
