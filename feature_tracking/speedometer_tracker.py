@@ -106,9 +106,11 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
     # we are confident in the match. If the template center has stayed the same for the last ~30 frames
     # TODO: Make hyper parameters adjustable
     # TODO: make the max jump distance allow depend on how long its been since the last match
+    trust_template_match = False
     if template_center is not None and len(template_match_history) >= 5:
         if all([x is not None and math.dist(template_center, x) < 10 for x in template_match_history[-5:]]):
             predicted_center = template_center
+            trust_template_match = True
 
     temp_history = template_match_history[-5:]
     template_match_history.clear()
@@ -177,7 +179,9 @@ def find_speedometer(frame, orb, bf, prev_kp, prev_des, speedometer_templates,
                                 (int((frame.shape[1] / 2) + mean_vector[0] * 25),
                                  int(frame.shape[0] / 2 + mean_vector[1] * 25)),
                                 (0, 255, 0), 2)
-            predicted_center = offset
+            # only updated the predicted center if we don't trust the template match
+            if not trust_template_match:
+                predicted_center = offset
 
         # Display the matches
         if debug:

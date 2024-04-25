@@ -18,7 +18,7 @@ def find_centroid(img):
     return x, y
 
 
-def find_angle_of_least_inertia(img):
+def find_angle_of_least_inertia(img, debug):
     area = calc_area(img)
     x, y = find_centroid(img)
 
@@ -44,7 +44,8 @@ def find_angle_of_least_inertia(img):
     img = cv2.drawMarker(img, (int(y), int(x)), color=(0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=10,
                         thickness=2)
     cv2.putText(img, f'{theta}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.imshow("Angle of Least Inertia Image", img)
+    if debug:
+        cv2.imshow("Angle of Least Inertia Image", img)
 
     # steering_angle = (np.pi / 2 - theta) if (theta > 0) else (-1 * (np.pi / 2 - abs(theta)))
     steering_angle = np.sign(theta) * (np.pi / 2 - abs(theta))
@@ -89,7 +90,7 @@ def get_steering_angle(speed_bottom_right, speed_top_left, frame, debug=False):
     masked_edges = cv2.bitwise_and(edges, edges, mask=mask)
 
     # Calculate angle of least inertia for the masked edges
-    steering_angle = find_angle_of_least_inertia(masked_edges)
+    steering_angle = find_angle_of_least_inertia(masked_edges, debug)
 
     return steering_angle
 
@@ -169,7 +170,7 @@ if __name__ == "__main__":
         masked_edges = cv2.bitwise_and(edges, edges, mask=mask)
 
         # Calculate angle of least inertia for the masked edges
-        steering_angle = find_angle_of_least_inertia(masked_edges)
+        steering_angle = find_angle_of_least_inertia(masked_edges, False)
 
         # Display the angle on the image
         angle_text = f"Steering angle: {steering_angle}"

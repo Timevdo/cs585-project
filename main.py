@@ -1,3 +1,6 @@
+import statistics
+import time
+
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
@@ -10,6 +13,10 @@ from feature_tracking.speedometer_tracker import init_feature_tracking, load_tem
 
 
 def run(start_frame=3000, frames_to_process=500):
+
+    # debug mode?
+    debug = False
+
     # Initialize feature detector
     orb, bf = init_feature_tracking()
 
@@ -46,7 +53,11 @@ def run(start_frame=3000, frames_to_process=500):
     original_wheel_angle = []
     original_road_angle = []
 
+    iteration_time = []
+
     while True:
+        start = time.time()
+
         # Read the next frame
         ret, frame = cap.read()
         if not ret:
@@ -59,7 +70,7 @@ def run(start_frame=3000, frames_to_process=500):
         speedometer_center, kp, des, t_l, b_r = find_speedometer(frame.copy(), orb, bf, prev_kp, prev_des,
                                                                  speedometer_templates,
                                                                  speedometer_center,
-                                                                 threshold=0.2, apply_filtering=True, debug=True)
+                                                                 threshold=0.2, apply_filtering=True, debug=debug)
 
         # Update previous frame and keypoints
         prev_kp = kp
@@ -68,7 +79,7 @@ def run(start_frame=3000, frames_to_process=500):
         if True:
             cv2.circle(frame, speedometer_center, 5, (0, 255, 0), -1)
 
-        road_angle = get_road_angle(speedometer_center, frame.copy(), debug=True)
+        road_angle = get_road_angle(speedometer_center, frame.copy(), debug=debug)
         if road_angle is not None:
             original_road_angle.append(road_angle)
         elif len(original_road_angle) > 0:
@@ -85,7 +96,7 @@ def run(start_frame=3000, frames_to_process=500):
             dt_road = 0
 
         if b_r is not None and t_l is not None:
-            steering_angle = get_steering_angle(b_r, t_l, frame.copy(), debug=True)
+            steering_angle = get_steering_angle(b_r, t_l, frame.copy(), debug=debug)
         else:
             steering_angle = wheel_angle_history[-1] if len(wheel_angle_history) > 0 else None
 
@@ -109,20 +120,25 @@ def run(start_frame=3000, frames_to_process=500):
         cv2.putText(frame, angle_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         cv2.putText(frame, f"Road angle: {road_angle}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-        cv2.imshow("Frame", frame)
+        if debug:
+            cv2.imshow("Frame", frame)
 
         if steering_angle is not None and road_angle is not None:
             wheel_angle_history.append(steering_angle)
             road_angle_history.append(road_angle)
 
         # Check for key press to exit
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if debug and cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
         if len(road_angle_history) > frames_to_process:
             break
 
         print(len(road_angle_history))
+        end = time.time() - start
+        iteration_time += [end]
+
+    print("Average iteration time per frame:", statistics.mean(iteration_time), "seconds")
 
     # Release video capture object and close windows
     cap.release()
@@ -175,6 +191,11 @@ if __name__ == "__main__":
     model.fit(road_angle_ts_arr, wheel_angle_ts_arr)
 
     yp = model.predict(road_angle_ts_arr)
+    plt.title("Steering Angle Prediction (Training)")
+    plt.plot(wheel_angle_ts_arr, label="Truth")
+    plt.plot(yp, label="Predicted")
+    plt.legend()
+    plt.show()
 
     print(yp.shape)
 
@@ -197,6 +218,11 @@ if __name__ == "__main__":
     wheel_angle_ts_arr = np.array(wheel_angle_ts)
 
     yp = model.predict(road_angle_ts_arr)
+    plt.title("Steering Angle Prediction (Evaluation)")
+    plt.plot(wheel_angle_ts_arr, label="Truth")
+    plt.plot(yp, label="Predicted")
+    plt.legend()
+    plt.show()
 
     print("R2", r2_score(wheel_angle_ts_arr, yp))
     print("RMSE", mean_squared_error(wheel_angle_ts_arr, yp, squared=False))
