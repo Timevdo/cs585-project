@@ -7,12 +7,6 @@
 ## Instructions
 To run the demo, run `python3 main.py`
 
-Most of the interesting stuff is in `feature_tracking`, and in `audi_workbook.ipynb` and `model.ipynb`
+Most of the interesting stuff is in `feature_tracking`, `workbooks`, and `main.py`.
 
-
-## Credits and Bibliography
-- E. Rublee, V. Rabaud, K. Konolige and G. Bradski, "ORB: An efficient alternative to SIFT or SURF," 2011 International Conference on Computer Vision, Barcelona, Spain, 2011, pp. 2564-2571, doi: 10.1109/ICCV.2011.6126544.
-https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=6126544
-- https://www.youtube.com/@windingroadmagazine
-- https://docs.opencv.org/4.x/d4/dee/tutorial_optical_flow.html
-- https://github.com/opencv/opencv_attic/blob/master/opencv/modules/features2d/src/draw.cpp
+Please see `CS585_Final_Project_Report.pdf` for a detailed report on the project.
